@@ -329,13 +329,8 @@ static void create_target_page()
    memcpy((u8*)&target.page + sizeof(target.page) - sizeof(fake_page->buffer), fake_page->buffer, sizeof(fake_page->buffer));
    target.page.svc_sp = (target.page.svc_sp & 0xFFF) | (target.thread_page_va & ~0xFFF);
    target.page.usr_lr = target.regs.lr;
-   target.page.usr_sp = target.regs.sp;
    target.page.usr_pc = target.regs.pc;
-   target.page.svc_ctl[0] = 0xFFFFFFFF;
-   target.page.svc_ctl[1] = 0xFFFFFFFF;
-   target.page.svc_ctl[2] = 0xFFFFFFFF;
-   target.page.svc_ctl[3] = 0xFFFFFFFF;
-//   target.page.svc_ctl[3] = 0x0F000000;
+   target.page.svc_ctl[3] = 0x08000000;
    extern void* __service_ptr;
 
    if(__service_ptr)
@@ -344,12 +339,18 @@ static void create_target_page()
       target.offset = 0xC90;
 
    u32* tpage = (u32*)&target.page;
+   u32 sp_offset = target.regs.sp - target.page.usr_sp;
+   u32 old_sp_reg = target.page.usr_sp;
    for (i = 0; i < 0x400; i++)
    {
       if (tpage[i] == fake_page->kthread_addr)
          tpage[i] = target.kthread_addr;
       else if (tpage[i] == fake_page->lock_addr)
          tpage[i] = target.lock_addr;
+
+      if((tpage[i] - old_sp_reg) < sizeof(target.stack) ||
+         (old_sp_reg - tpage[i]) < sizeof(target.stack))
+         tpage[i] += sp_offset;
    }
 }
 static void dummy_thread_entry(Handle lock)
