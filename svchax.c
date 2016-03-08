@@ -420,7 +420,9 @@ static u32 get_first_free_basemem_page()
    svcGetSystemInfo(&v1, 2, 0);
    svcGetSystemInfo(&v2, 0, 3);
 
-   return 0xE006C000 + *(u32*)0x1FF80040 + *(u32*)0x1FF80044 + *(u32*)0x1FF80048 + v1 - v2 - (*(u32*)0x1FF80000 == 0x022E0000? 0x1000: 0x0);
+   return 0xE006C000 + *(u32*)0x1FF80040 + *(u32*)0x1FF80044 + *(u32*)0x1FF80048 + v1 - v2
+         - (*(u32*)0x1FF80000 == 0x022E0000? 0x1000: 0x0)
+         + (target.isNew3DS? 0x1000: 0x0);
 }
 
 
@@ -430,6 +432,10 @@ static void do_memchunkhax2(void)
    int i;
    u32 tmp;
    target.main_thread_page_addr = get_thread_page();
+   aptOpenSession();
+   APT_CheckNew3DS(&target.isNew3DS);
+   APT_SetAppCpuTimeLimit(5);
+   aptCloseSession();
 
    const u32 dummy_threads_count = 8;
    Handle dummy_thread_handles[8];
@@ -475,10 +481,6 @@ static void do_memchunkhax2(void)
    u32 fragmented_address = 0;
 
    arbiter = __sync_get_arbiter();
-   aptOpenSession();
-   APT_CheckNew3DS(&target.isNew3DS);
-   APT_SetAppCpuTimeLimit(5);
-   aptCloseSession();
 
    create_target_page();
 
