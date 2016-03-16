@@ -547,9 +547,8 @@ static u32 get_first_free_basemem_page()
    svcGetSystemInfo(&v1, 2, 0);
    svcGetSystemInfo(&v2, 0, 3);
 
-   return 0xE006C000 + *(u32*)0x1FF80040 + *(u32*)0x1FF80044 + *(u32*)0x1FF80048 + v1 - v2
-         - (*(u32*)0x1FF80000 <= 0x02310000? (target.isNew3DS? 0x2000: 0x1000): 0x0)
-         + (target.isNew3DS? 0x1000: 0x0);
+   return 0xE006C000 + (target.isNew3DS? 0x10001000: 0x08000000) + v1 - v2
+         - (*(u32*)0x1FF80000 <= 0x02310000? (target.isNew3DS? 0x2000: 0x1000): 0x0);
 }
 
 
