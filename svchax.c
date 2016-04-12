@@ -199,7 +199,6 @@ static u32 get_threads_limit(void)
    return thread_limit_max - thread_limit_current;
 }
 
-__attribute__((optimize(0)))
 static void do_memchunkhax2(void)
 {
    static u8 flush_buffer[0x10000];
