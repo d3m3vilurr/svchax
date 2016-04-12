@@ -20,6 +20,7 @@ int main(int argc, char** argv)
    consoleInit(GFX_BOTTOM, NULL);
    printf("svchax\n");
    printf("Press Start to exit.\n");
+   printf("kernel version : %i.%i.%i\n", (int)*(u8*)(0x1FF80003), (int)*(u8*)(0x1FF80002), (int)*(u8*)(0x1FF80001));
 
    osSetSpeedupEnable(false);
    svchax_init();
@@ -30,7 +31,6 @@ int main(int argc, char** argv)
 
    u32 frames = 0;
    printf("result : %s\n", test_result);
-   printf("kernel version : %i.%i.%i", (int)*(u8*)(0x1FF80003), (int)*(u8*)(0x1FF80002), (int)*(u8*)(0x1FF80001));
    printf("\n");
    while (aptMainLoop())
    {
