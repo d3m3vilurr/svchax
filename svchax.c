@@ -4,7 +4,10 @@
 #include <malloc.h>
 #include "svchax.h"
 
+extern void* __service_ptr;
+
 u32 __ctr_svchax = 0;
+u32 __ctr_svchax_srv = 0;
 
 typedef u32(*backdoor_fn)(u32* args);
 
@@ -26,6 +29,16 @@ static u32 svc_7b(backdoor_fn entry, u32* args)
 
    svcBackdoor(backdoor_wrap);
    return backdoor_rv;
+}
+
+static u32 k_read_kaddr(u32* kaddr)
+{
+   return *kaddr;
+}
+
+static u32 read_kaddr(u32 kaddr)
+{
+   return svc_7b(k_read_kaddr, (u32*)kaddr);
 }
 
 static u32 k_write_kaddr(u32* args)
@@ -91,7 +104,7 @@ typedef struct
    volatile bool has_7B_access;
    Handle handle;
    bool keep;
-}thread_vars_t;
+} thread_vars_t;
 
 typedef struct
 {
@@ -161,8 +174,8 @@ static u32 get_first_free_basemem_page(bool isNew3DS)
    svcGetSystemInfo(&v1, 2, 0);
    svcGetSystemInfo(&v2, 0, 3);
 
-   return 0xE006C000 + (isNew3DS? 0x10001000: 0x08000000) + v1 - v2
-         - (*(u32*)0x1FF80000 <= 0x02310000? (isNew3DS? 0x2000: 0x1000): 0x0);
+   return 0xE006C000 + (isNew3DS ? 0x10001000 : 0x08000000) + v1 - v2
+          - (*(u32*)0x1FF80000 <= 0x02310000 ? (isNew3DS ? 0x2000 : 0x1000) : 0x0);
 
 }
 
@@ -212,9 +225,9 @@ static void do_memchunkhax2(void)
 
    for (i = 0; i < mch2.threads_limit; i++)
    {
-      svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)check_tls_thread_entry, &mch2.threads[i].keep,
+      svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)check_tls_thread_entry, (u32)&mch2.threads[i].keep,
                       mch2.threads[i].stack_top, 0x18, 0);
-      svcWaitSynchronization(&mch2.threads[i].handle, U64_MAX);
+      svcWaitSynchronization(mch2.threads[i].handle, U64_MAX);
    }
 
    for (i = 0; i < mch2.threads_limit; i++)
@@ -305,6 +318,7 @@ static void do_memchunkhax2(void)
 
    svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2, mch2.threads[0x1F].stack_top,
                    0x3F, 1);
+
    while ((u32) svcArbitrateAddress(mch2.arbiter, mch2.alloc_address, ARBITRATION_WAIT_IF_LESS_THAN_TIMEOUT, 0,
                                     0) == 0xD9001814);
 
@@ -324,23 +338,24 @@ static void do_memchunkhax2(void)
 
    for (i = 0; i < mch2.threads_limit; i++)
    {
-      if(mch2.threads[i].keep)
+      if (mch2.threads[i].keep)
          continue;
 
       thread_ACL[0] = 0;
-      GSPGPU_FlushDataCache(thread_ACL, 16);
-      GSPGPU_InvalidateDataCache(thread_ACL, 16);
+      GSPGPU_FlushDataCache((void*)thread_ACL, 16);
+      GSPGPU_InvalidateDataCache((void*)thread_ACL, 16);
 
       mch2.threads[i].has_7B_access = false;
       svcClearEvent(mch2.main_thread_lock);
       svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)target_thread_entry, i,
                       mch2.threads[i].stack_top, 0x18, 0);
       svcWaitSynchronization(mch2.main_thread_lock, U64_MAX);
-      if(thread_ACL[0])
+
+      if (thread_ACL[0])
       {
          thread_ACL[3] = 0x08000000;
-         GSPGPU_FlushDataCache(thread_ACL, 16);
-         GSPGPU_InvalidateDataCache(thread_ACL, 16);
+         GSPGPU_FlushDataCache((void*)thread_ACL, 16);
+         GSPGPU_InvalidateDataCache((void*)thread_ACL, 16);
          mch2.threads[i].has_7B_access = true;
          break;
       }
@@ -348,12 +363,13 @@ static void do_memchunkhax2(void)
    }
 
    svcSignalEvent(mch2.target_threads_lock);
+
    for (i = 0; i < mch2.threads_limit; i++)
    {
-      if(!mch2.threads[i].handle)
+      if (!mch2.threads[i].handle)
          continue;
 
-      if(!mch2.threads[i].keep)
+      if (!mch2.threads[i].keep)
          svcWaitSynchronization(mch2.threads[i].handle, U64_MAX);
 
       svcCloseHandle(mch2.threads[i].handle);
@@ -460,41 +476,52 @@ static void do_memchunkhax1(void)
    write_kaddr(0x1F000008, saved_vram_value);
 }
 
-static s32 k_enable_all_svcs(void)
+static void k_enable_all_svcs(int isNew3DS)
 {
-   __asm__ volatile("cpsid aif");
+   u32* thread_ACL = *(*(u32***)0xFFFF9000 + 0x22) - 0x6;
+   u32* process_ACL = *(u32**)0xFFFF9004 + (isNew3DS ? 0x24 : 0x22);
 
-   u32*  svc_access_control = *(*(u32***)0xFFFF9000 + 0x22) - 0x6;
-
-   svc_access_control[0] = 0xFFFFFFFE;
-   svc_access_control[1] = 0xFFFFFFFF;
-   svc_access_control[2] = 0xFFFFFFFF;
-   svc_access_control[3] = 0x3FFFFFFF;
-
-   return 0;
+   memset(thread_ACL, 0xFF, 0x10);
+   memset(process_ACL, 0xFF, 0x10);
 }
 
-void svchax_init(void)
+Result svchax_init(bool patch_srv)
 {
-   extern void* __service_ptr;
+   u8 isNew3DS;
+   aptOpenSession();
+   APT_CheckNew3DS(&isNew3DS);
+   aptCloseSession();
 
-   if (__ctr_svchax)
-      return;
-
-   if (__service_ptr)
+   if (!__ctr_svchax)
    {
-      u32 kver = *(u32*)0x1FF80000;
+      if (__service_ptr)
+      {
+         u32 kver = *(u32*)0x1FF80000;
 
-      if (kver > 0x02320B00)
-         return;
-      else if (kver > 0x022E0000)
-         do_memchunkhax2();
-      else
-         do_memchunkhax1();
+         if (kver > 0x02320B00)
+            return -1;
+         else if (kver > 0x022E0000)
+            do_memchunkhax2();
+         else
+            do_memchunkhax1();
+      }
+
+      svc_7b((backdoor_fn)k_enable_all_svcs, (u32*)(int)isNew3DS);
+
+      __ctr_svchax = 1;
    }
 
-   svcBackdoor(k_enable_all_svcs);
+   if (patch_srv && !__ctr_svchax_srv)
+   {
+      u32 PID_kaddr = read_kaddr(0xFFFF9004) + (isNew3DS ? 0xBC : 0xB4);
+      u32 old_PID = read_kaddr(PID_kaddr);
+      write_kaddr(PID_kaddr, 0);
+      srvExit();
+      srvInit();
+      write_kaddr(PID_kaddr, old_PID);
 
-   __ctr_svchax = 1;
+      __ctr_svchax_srv = 1;
+   }
 
+   return 0;
 }

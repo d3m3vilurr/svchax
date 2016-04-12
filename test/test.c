@@ -23,7 +23,7 @@ int main(int argc, char** argv)
    printf("kernel version : %i.%i.%i\n", (int)*(u8*)(0x1FF80003), (int)*(u8*)(0x1FF80002), (int)*(u8*)(0x1FF80001));
 
    osSetSpeedupEnable(false);
-   svchax_init();
+   svchax_init(true);
    osSetSpeedupEnable(true);
 
    if(__ctr_svchax)
