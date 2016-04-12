@@ -8,7 +8,7 @@ LIBCTRU_NO_DEPRECATION  = 1
 
 
 OBJS :=
-OBJS += svchax.o
+OBJS += ../svchax.o
 OBJS += test.o
 
 
@@ -46,7 +46,7 @@ APP_UNIQUE_ID     := $(shell echo $(APP_UNIQUE_ID) | cut -c1-7)
 
 MAKEROM_ARGS_COMMON = -rsf $(APP_RSF) -exefslogo -elf $(TARGET).elf -icon $(TARGET).icn -banner $(TARGET).bnr -DAPP_TITLE="$(APP_TITLE)" -DAPP_PRODUCT_CODE="$(APP_PRODUCT_CODE)" -DAPP_UNIQUE_ID=$(APP_UNIQUE_ID) -DAPP_SYSTEM_MODE=$(APP_SYSTEM_MODE) -DAPP_SYSTEM_MODE_EXT=$(APP_SYSTEM_MODE_EXT)
 
-INCDIRS := -I$(CTRULIB)/include
+INCDIRS := -I$(CTRULIB)/include -I..
 LIBDIRS := -L. -L$(CTRULIB)/lib
 
 
