@@ -491,12 +491,12 @@ Result svchax_init(bool patch_srv)
    APT_CheckNew3DS(&isNew3DS);
    aptCloseSession();
 
+   u32 kver = *(u32*)0x1FF80000;
+
    if (!__ctr_svchax)
    {
       if (__service_ptr)
       {
-         u32 kver = *(u32*)0x1FF80000;
-
          if (kver > 0x02320B00)
             return -1;
          else if (kver > 0x022E0000)
@@ -512,7 +512,7 @@ Result svchax_init(bool patch_srv)
 
    if (patch_srv && !__ctr_svchax_srv)
    {
-      u32 PID_kaddr = read_kaddr(0xFFFF9004) + (isNew3DS ? 0xBC : 0xB4);
+      u32 PID_kaddr = read_kaddr(0xFFFF9004) + (isNew3DS ? 0xBC : (kver > 0x02280000) ? 0xB4 : 0xAC);
       u32 old_PID = read_kaddr(PID_kaddr);
       write_kaddr(PID_kaddr, 0);
       srvExit();

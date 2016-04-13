@@ -13,7 +13,7 @@ s32 set_test_result(void)
    return 0;
 }
 
-static test_thread_entry(void)
+static void test_thread_entry(void)
 {
    svcBackdoor(set_test_result);
    svcExitThread();
