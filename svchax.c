@@ -85,14 +85,22 @@ static u32 get_thread_page(void)
    return 0;
 }
 
+
+typedef struct
+{
+   Handle started_event;
+   Handle lock;
+   volatile u32 target_kaddr;
+   volatile u32 target_val;
+} mch2_thread_args_t;
+
 typedef struct
 {
    u32* stack_top;
    Handle handle;
-   volatile u32 target_kaddr;
-   volatile u32 target_val;
    bool keep;
-} thread_vars_t;
+   mch2_thread_args_t args;
+} mch2_thread_t;
 
 typedef struct
 {
@@ -114,15 +122,14 @@ typedef struct
    u32 threads_limit;
    Handle alloc_thread;
    Handle poll_thread;
-   thread_vars_t threads[MCH2_THREAD_COUNT_MAX];
-} memchunkhax2_vars_t;
-static memchunkhax2_vars_t mch2;
+   mch2_thread_t threads[MCH2_THREAD_COUNT_MAX];
+} mch2_vars_t;
 
-static void alloc_thread_entry(void)
+static void alloc_thread_entry(mch2_vars_t* mch2)
 {
    u32 tmp;
 
-   svcControlMemory(&tmp, mch2.alloc_address, 0x0, mch2.alloc_size, MEMOP_ALLOC, MEMPERM_READ | MEMPERM_WRITE);
+   svcControlMemory(&tmp, mch2->alloc_address, 0x0, mch2->alloc_size, MEMOP_ALLOC, MEMPERM_READ | MEMPERM_WRITE);
    svcExitThread();
 }
 
@@ -138,13 +145,13 @@ static void check_tls_thread_entry(bool* keep)
    svcExitThread();
 }
 
-static void target_thread_entry(int id)
+static void target_thread_entry(mch2_thread_args_t* args)
 {
-   svcSignalEvent(mch2.main_thread_lock);
-   svcWaitSynchronization(mch2.target_threads_lock, U64_MAX);
+   svcSignalEvent(args->started_event);
+   svcWaitSynchronization(args->lock, U64_MAX);
 
-   if (mch2.threads[id].target_kaddr)
-      write_kaddr(mch2.threads[id].target_kaddr, mch2.threads[id].target_val);
+   if (args->target_kaddr)
+      write_kaddr(args->target_kaddr, args->target_val);
 
    svcExitThread();
 }
@@ -192,8 +199,7 @@ static void do_memchunkhax2(void)
 
    int i;
    u32 tmp;
-
-   memset(&mch2, 0x00, sizeof(mch2));
+   mch2_vars_t mch2 = {0};
 
    mch2.flush_buffer = flush_buffer;
    mch2.threads_limit = get_threads_limit();
@@ -313,12 +319,16 @@ static void do_memchunkhax2(void)
       if (mch2.threads[i].keep)
          continue;
 
+      mch2.threads[i].args.started_event = mch2.main_thread_lock;
+      mch2.threads[i].args.lock = mch2.target_threads_lock;
+      mch2.threads[i].args.target_kaddr = 0;
+
       thread_ACL[0] = 0;
       GSPGPU_FlushDataCache((void*)thread_ACL, 16);
       GSPGPU_InvalidateDataCache((void*)thread_ACL, 16);
 
       svcClearEvent(mch2.main_thread_lock);
-      svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)target_thread_entry, i,
+      svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)target_thread_entry, (u32)&mch2.threads[i].args,
                       mch2.threads[i].stack_top, 0x18, 0);
       svcWaitSynchronization(mch2.main_thread_lock, U64_MAX);
 
@@ -327,8 +337,8 @@ static void do_memchunkhax2(void)
          thread_ACL[3] = 0x08000000;
          GSPGPU_FlushDataCache((void*)thread_ACL, 16);
          GSPGPU_InvalidateDataCache((void*)thread_ACL, 16);
-         mch2.threads[i].target_kaddr = get_thread_page() + 0xF44;
-         mch2.threads[i].target_val = 0x08000000;
+         mch2.threads[i].args.target_kaddr = get_thread_page() + 0xF44;
+         mch2.threads[i].args.target_val = 0x08000000;
          break;
       }
 
