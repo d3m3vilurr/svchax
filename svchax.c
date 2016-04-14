@@ -6,7 +6,11 @@
 
 #define CURRENT_KTHREAD          0xFFFF9000
 #define CURRENT_KPROCESS         0xFFFF9004
+#define CURRENT_KPROCESS_HANDLE  0xFFFF8001
 #define RESOURCE_LIMIT_THREADS   0x2
+
+#define MCH2_THREAD_COUNT_MAX    0x20
+#define MCH2_THREAD_STACK_SIZE   0x1000
 
 u32 __ctr_svchax = 0;
 u32 __ctr_svchax_srv = 0;
@@ -110,7 +114,7 @@ typedef struct
    u32 threads_limit;
    Handle alloc_thread;
    Handle poll_thread;
-   thread_vars_t threads[0x20];
+   thread_vars_t threads[MCH2_THREAD_COUNT_MAX];
 } memchunkhax2_vars_t;
 static memchunkhax2_vars_t mch2;
 
@@ -163,15 +167,13 @@ static u32 get_threads_limit(void)
    s64 thread_limit_max;
    u32 thread_limit_name = RESOURCE_LIMIT_THREADS;
 
-   svcGetResourceLimit(&resource_limit_handle, 0xFFFF8001);
+   svcGetResourceLimit(&resource_limit_handle, CURRENT_KPROCESS_HANDLE);
    svcGetResourceLimitCurrentValues(&thread_limit_current, resource_limit_handle, &thread_limit_name, 1);
    svcGetResourceLimitLimitValues(&thread_limit_max, resource_limit_handle, &thread_limit_name, 1);
    svcCloseHandle(resource_limit_handle);
 
-   if (thread_limit_max > 0x20)
-      thread_limit_max = 0x20;
-
-   thread_limit_max &= ~0x7;
+   if (thread_limit_max > MCH2_THREAD_COUNT_MAX)
+      thread_limit_max = MCH2_THREAD_COUNT_MAX;
 
    return thread_limit_max - thread_limit_current;
 }
@@ -179,7 +181,7 @@ static u32 get_threads_limit(void)
 static void do_memchunkhax2(void)
 {
    static u8 flush_buffer[0x8000];
-   static u8 thread_stacks[0x20000];
+   static u8 thread_stacks[MCH2_THREAD_COUNT_MAX * MCH2_THREAD_STACK_SIZE];
 
    int i;
    u32 tmp;
@@ -189,8 +191,8 @@ static void do_memchunkhax2(void)
    mch2.flush_buffer = flush_buffer;
    mch2.threads_limit = get_threads_limit();
 
-   for (i = 0; i < 0x20; i++)
-      mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + ((i + 1) << 12));
+   for (i = 0; i < MCH2_THREAD_COUNT_MAX; i++)
+      mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + (i + 1) * MCH2_THREAD_STACK_SIZE);
 
    aptOpenSession();
    APT_CheckNew3DS(&mch2.isNew3DS);
@@ -277,7 +279,7 @@ static void do_memchunkhax2(void)
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
 
-   svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2, mch2.threads[0x1F].stack_top,
+   svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2, mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top,
                    0x3F, 1);
 
    while ((u32) svcArbitrateAddress(mch2.arbiter, mch2.alloc_address, ARBITRATION_WAIT_IF_LESS_THAN_TIMEOUT, 0,
