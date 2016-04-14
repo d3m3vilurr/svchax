@@ -151,15 +151,19 @@ static void target_thread_entry(int id)
 
 static u32 get_first_free_basemem_page(bool isNew3DS)
 {
-   s64 v1, v2;
-   svcGetSystemInfo(&v1, 2, 0);
-   svcGetSystemInfo(&v2, 0, 3);
+   s64 v1;
+   s32 memused_base;
+   s32 memused_base_linear;  // guessed
 
-   return 0x2006C000
-         + (isNew3DS ? 0x10001000 : 0x08000000)
-         + (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0)? 0xC0000000 : 0xD0000000)
-         - (osGetKernelVersion() < SYSTEM_VERSION(2, 50, 1)? (isNew3DS ? 0x2000 : 0x1000) : 0x0)
-         + v1 - v2;
+   memused_base = osGetMemRegionUsed(MEMREGION_BASE);
+
+   svcGetSystemInfo(&v1, 2, 0);
+   memused_base_linear = 0x6C000 + v1 + (osGetKernelVersion() > SYSTEM_VERSION(2, 49, 0)? (isNew3DS ? 0x1000 : 0x0000) : -0x1000);
+
+   return 0x20000000                             // FCRAM base
+         + (isNew3DS ? 0x10000000 : 0x08000000)  // FCRAM size
+         - (memused_base - memused_base_linear)  // memory usage for pages allocated without the MEMOP_LINEAR_FLAG flag
+         + (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0)? 0xC0000000 : 0xD0000000); // kernel FCRAM mapping offset
 
 }
 
