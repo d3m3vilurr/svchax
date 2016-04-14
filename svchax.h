@@ -2,11 +2,15 @@
 #define _SVCHAX_H__
 
 /*
- * requirements when calling svchax_init:
+ * for 3DSX builds, svchax_init expects that:
  *
  * - gfxInit was already called.
  * - new 3DS higher clockrate and L2 cache are disabled.
- * - at least 64kb (16 pages) of unallocated linear memory.
+ * - there is at least 64 KBytes (16 pages) of unallocated linear memory.
+ *   ( the current 3dsx loaders and ctrulib's default allocator will keep 1MB
+ *     of unallocated linear memory, so this is only relevant when using
+ *     a custom allocator)
+ *
  *
  * svchax_init will grant full svc access to the calling thread and process
  * up to system version 10.7 (kernel version 2.50-11), by using:
