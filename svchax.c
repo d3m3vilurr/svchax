@@ -8,10 +8,11 @@
 #define CURRENT_KPROCESS         0xFFFF9004
 #define RESOURCE_LIMIT_THREADS   0x2
 
-extern void* __service_ptr;
-
 u32 __ctr_svchax = 0;
 u32 __ctr_svchax_srv = 0;
+
+extern void* __service_ptr;
+extern Handle gspEvents[GSPGPU_EVENT_MAX];
 
 typedef u32(*backdoor_fn)(u32* args);
 
@@ -177,7 +178,7 @@ static u32 get_threads_limit(void)
 
 static void do_memchunkhax2(void)
 {
-   static u8 flush_buffer[0x10000];
+   static u8 flush_buffer[0x8000];
    static u8 thread_stacks[0x20000];
 
    int i;
@@ -228,10 +229,6 @@ static void do_memchunkhax2(void)
 
    svcCloseHandle(mch2.dummy_threads_lock);
 
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-
    u32 fragmented_address = 0;
 
    mch2.arbiter = __sync_get_arbiter();
@@ -250,12 +247,9 @@ static void do_memchunkhax2(void)
    fragmented_address = __ctru_heap + __ctru_heap_size;
    u32 linear_address;
    mch2.alloc_address = fragmented_address + fragmented_size;
-   gfxFlushBuffers();
 
    svcControlMemory(&linear_address, 0x0, 0x0, linear_size, MEMOP_ALLOC_LINEAR,
                     MEMPERM_READ | MEMPERM_WRITE);
-
-   gfxFlushBuffers();
 
    if (fragmented_size)
       svcControlMemory(&tmp, (u32)fragmented_address, 0x0, fragmented_size, MEMOP_ALLOC,
@@ -269,25 +263,18 @@ static void do_memchunkhax2(void)
 
    u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + 0xC0000000;
 
-   tmp = alloc_address_kaddr;
-
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-
    mch2.thread_page_kva = get_first_free_basemem_page(mch2.isNew3DS) - 0x10000; // skip down 16 pages
    ((u32*)linear_buffer)[0] = 1;
    ((u32*)linear_buffer)[1] = mch2.thread_page_kva;
    ((u32*)linear_buffer)[2] = alloc_address_kaddr + (((mch2.alloc_size >> 12) - 3) << 13) + (skip_pages << 12);
 
    u32 dst_memchunk = linear_address + (((mch2.alloc_size >> 12) - 2) << 13) + (skip_pages << 12);
-   gfxFlushBuffers();
 
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
+   memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
+
    GSPGPU_InvalidateDataCache((void*)dst_memchunk, 16);
    GSPGPU_FlushDataCache((void*)linear_buffer, 16);
-   memcpy(flush_buffer, flush_buffer + 0x8000, 0x8000);
-   extern Handle gspEvents[GSPGPU_EVENT_MAX];
+   memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
 
    svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2, mch2.threads[0x1F].stack_top,
@@ -297,6 +284,7 @@ static void do_memchunkhax2(void)
                                     0) == 0xD9001814);
 
    GX_TextureCopy((void*)linear_buffer, 0, (void*)dst_memchunk, 0, 16, 8);
+   memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    svcWaitSynchronization(gspEvents[GSPGPU_EVENT_PPF], U64_MAX);
 
    svcWaitSynchronization(mch2.alloc_thread, U64_MAX);
