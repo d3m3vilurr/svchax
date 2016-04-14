@@ -10,7 +10,7 @@
 #define RESOURCE_LIMIT_THREADS   0x2
 
 #define MCH2_THREAD_COUNT_MAX    0x20
-#define MCH2_THREAD_STACK_SIZE   0x1000
+#define MCH2_THREAD_STACKS_SIZE  0x1000
 
 u32 __ctr_svchax = 0;
 u32 __ctr_svchax_srv = 0;
@@ -181,7 +181,7 @@ static u32 get_threads_limit(void)
 static void do_memchunkhax2(void)
 {
    static u8 flush_buffer[0x8000];
-   static u8 thread_stacks[MCH2_THREAD_COUNT_MAX * MCH2_THREAD_STACK_SIZE];
+   static u8 thread_stacks[MCH2_THREAD_STACKS_SIZE];
 
    int i;
    u32 tmp;
@@ -192,7 +192,7 @@ static void do_memchunkhax2(void)
    mch2.threads_limit = get_threads_limit();
 
    for (i = 0; i < MCH2_THREAD_COUNT_MAX; i++)
-      mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + (i + 1) * MCH2_THREAD_STACK_SIZE);
+      mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + (i + 1) * (MCH2_THREAD_STACKS_SIZE / MCH2_THREAD_COUNT_MAX));
 
    aptOpenSession();
    APT_CheckNew3DS(&mch2.isNew3DS);
