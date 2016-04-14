@@ -53,36 +53,6 @@ static void write_kaddr(u32 kaddr, u32 val)
    svc_7b(k_write_kaddr, args);
 }
 
-static __attribute__((naked))
-Result GetResourceLimit(Handle* resourceLimit, Handle process)
-{
-   __asm__(
-      "str r0, [sp, #-4]! \n\t"
-      "svc 0x38 \n\t"
-      "ldr r2, [sp], #4 \n\t"
-      "str r1, [r2] \n\t"
-      "bx  lr \n\t");
-   return 0;
-}
-
-static __attribute__((naked))
-Result GetResourceLimitLimitValues(s64* values, Handle resourceLimit, u32* names, s32 nameCount)
-{
-   __asm__(
-      "svc 0x39 \n\t"
-      "bx  lr \n\t");
-   return 0;
-}
-
-static __attribute__((naked))
-Result GetResourceLimitCurrentValues(s64* values, Handle resourceLimit, u32* names, s32 nameCount)
-{
-   __asm__(
-      "svc 0x3A \n\t"
-      "bx  lr \n\t");
-   return 0;
-}
-
 __attribute__((naked))
 static u32* get_thread_page(void)
 {
@@ -186,9 +156,9 @@ static u32 get_threads_limit(void)
    s64 thread_limit_max;
    u32 thread_limit_name = 2;
 
-   GetResourceLimit(&resource_limit_handle, 0xFFFF8001);
-   GetResourceLimitCurrentValues(&thread_limit_current, resource_limit_handle, &thread_limit_name, 1);
-   GetResourceLimitLimitValues(&thread_limit_max, resource_limit_handle, &thread_limit_name, 1);
+   svcGetResourceLimit(&resource_limit_handle, 0xFFFF8001);
+   svcGetResourceLimitCurrentValues(&thread_limit_current, resource_limit_handle, &thread_limit_name, 1);
+   svcGetResourceLimitLimitValues(&thread_limit_max, resource_limit_handle, &thread_limit_name, 1);
    svcCloseHandle(resource_limit_handle);
 
    if (thread_limit_max > 0x20)
