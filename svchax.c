@@ -85,7 +85,6 @@ static u32 get_thread_page(void)
    return 0;
 }
 
-
 typedef struct
 {
    u32* stack_top;
@@ -99,6 +98,7 @@ typedef struct
 {
    u32 old_cpu_time_limit;
    u8 isNew3DS;
+   u32 kernel_fcram_mapping_offset;
 
    Handle arbiter;
    volatile u32 alloc_address;
@@ -190,6 +190,7 @@ static void do_memchunkhax2(void)
 
    mch2.flush_buffer = flush_buffer;
    mch2.threads_limit = get_threads_limit();
+   mch2.kernel_fcram_mapping_offset = (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0))? 0xC0000000 : 0xD0000000;
 
    for (i = 0; i < MCH2_THREAD_COUNT_MAX; i++)
       mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + (i + 1) * (MCH2_THREAD_STACKS_SIZE / MCH2_THREAD_COUNT_MAX));
@@ -263,7 +264,7 @@ static void do_memchunkhax2(void)
    for (i = skip_pages; i < (linear_size >> 12) ; i += 2)
       svcControlMemory(&tmp, (u32)linear_address + (i << 12), 0x0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + 0xC0000000;
+   u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + mch2.kernel_fcram_mapping_offset;
 
    mch2.thread_page_kva = get_first_free_basemem_page(mch2.isNew3DS) - 0x10000; // skip down 16 pages
    ((u32*)linear_buffer)[0] = 1;
@@ -447,15 +448,15 @@ Result svchax_init(bool patch_srv)
    APT_CheckNew3DS(&isNew3DS);
    aptCloseSession();
 
-   u32 kver = *(u32*)0x1FF80000;
+   u32 kver = osGetKernelVersion();
 
    if (!__ctr_svchax)
    {
       if (__service_ptr)
       {
-         if (kver > 0x02320B00)
+         if (kver > SYSTEM_VERSION(2, 50, 11))
             return -1;
-         else if (kver > 0x022E0000)
+         else if (kver > SYSTEM_VERSION(2, 46, 0))
             do_memchunkhax2();
          else
             do_memchunkhax1();
@@ -468,7 +469,7 @@ Result svchax_init(bool patch_srv)
 
    if (patch_srv && !__ctr_svchax_srv)
    {
-      u32 PID_kaddr = read_kaddr(CURRENT_KPROCESS) + (isNew3DS ? 0xBC : (kver > 0x02280000) ? 0xB4 : 0xAC);
+      u32 PID_kaddr = read_kaddr(CURRENT_KPROCESS) + (isNew3DS ? 0xBC : (kver > SYSTEM_VERSION(2, 40, 0)) ? 0xB4 : 0xAC);
       u32 old_PID = read_kaddr(PID_kaddr);
       write_kaddr(PID_kaddr, 0);
       srvExit();
