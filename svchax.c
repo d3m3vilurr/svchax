@@ -12,6 +12,10 @@
 #define MCH2_THREAD_COUNT_MAX    0x20
 #define MCH2_THREAD_STACKS_SIZE  0x1000
 
+#define SVC_ACL_OFFSET(svc_id)   (((svc_id) >> 5) << 2)
+#define SVC_ACL_MASK(svc_id)     (0x1 << ((svc_id) & 0x1F))
+#define THREAD_PAGE_ACL_OFFSET   0xF38
+
 u32 __ctr_svchax = 0;
 u32 __ctr_svchax_srv = 0;
 
@@ -308,7 +312,7 @@ static void do_memchunkhax2(void)
 
    u32* mapped_page = (u32*)(mch2.alloc_address + mch2.alloc_size - 0x1000);
 
-   volatile u32* thread_ACL = &mapped_page[0xF38 >> 2];
+   volatile u32* thread_ACL = &mapped_page[THREAD_PAGE_ACL_OFFSET >> 2];
 
    svcCreateEvent(&mch2.main_thread_lock, 0);
    svcCreateEvent(&mch2.target_threads_lock, 1);
@@ -334,11 +338,11 @@ static void do_memchunkhax2(void)
 
       if (thread_ACL[0])
       {
-         thread_ACL[3] = 0x08000000;
+         thread_ACL[SVC_ACL_OFFSET(0x7B) >> 2] = SVC_ACL_MASK(0x7B);
          GSPGPU_FlushDataCache((void*)thread_ACL, 16);
          GSPGPU_InvalidateDataCache((void*)thread_ACL, 16);
-         mch2.threads[i].args.target_kaddr = get_thread_page() + 0xF44;
-         mch2.threads[i].args.target_val = 0x08000000;
+         mch2.threads[i].args.target_kaddr = get_thread_page() + THREAD_PAGE_ACL_OFFSET + SVC_ACL_OFFSET(0x7B);
+         mch2.threads[i].args.target_val = SVC_ACL_MASK(0x7B);
          break;
       }
 
@@ -454,7 +458,10 @@ static void memchunkhax1_write_pair(u32 val1, u32 val2)
 static void do_memchunkhax1(void)
 {
    u32 saved_vram_value = *(u32*)0x1F000008;
-   memchunkhax1_write_pair(get_thread_page() + 0xF44, 0x1F000000);
+
+   // 0x1F000000 contains the enable bit for svc 0x7B
+   memchunkhax1_write_pair(get_thread_page() + THREAD_PAGE_ACL_OFFSET + SVC_ACL_OFFSET(0x7B), 0x1F000000);
+
    write_kaddr(0x1F000008, saved_vram_value);
 }
 
