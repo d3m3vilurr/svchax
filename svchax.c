@@ -22,29 +22,32 @@ u32 __ctr_svchax_srv = 0;
 extern void* __service_ptr;
 extern Handle gspEvents[GSPGPU_EVENT_MAX];
 
-typedef u32(*backdoor_fn)(u32* args);
+typedef u32(*backdoor_fn)(u32 arg0, u32 arg1);
 
-static u32* backdoor_args;
-static u32  backdoor_rv;
-static backdoor_fn backdoor_entry;
-
-static s32 k_backdoor_wrap(void)
+__attribute((naked))
+static u32 svc_7b(backdoor_fn entry_fn, ...) // can pass up to two arguments to entry_fn(...)
 {
-   __asm__ volatile("cpsid aif \n\t");
-   backdoor_rv = backdoor_entry(backdoor_args);
+   __asm__ volatile(
+            "push {r0, r1, r2} \n\t"
+            "mov r3, sp \n\t"
+            "add r0, pc, #12 \n\t"
+            "svc 0x7B \n\t"
+            "add sp, sp, #8 \n\t"
+            "ldr r0, [sp], #4 \n\t"
+            "bx lr \n\t"
+            "cpsid aif \n\t"
+            "ldr r2, [r3], #4 \n\t"
+            "ldmfd r3!, {r0, r1} \n\t"
+            "push {r3, lr} \n\t"
+            "blx r2 \n\t"
+            "pop {r3, lr} \n\t"
+            "str r0, [r3, #-4]! \n\t"
+            "bx lr \n\t"
+            );
    return 0;
 }
 
-static u32 svc_7b(backdoor_fn entry, u32* args)
-{
-   backdoor_args = args;
-   backdoor_entry = entry;
-
-   svcBackdoor(k_backdoor_wrap);
-   return backdoor_rv;
-}
-
-static void k_enable_all_svcs(int isNew3DS)
+static void k_enable_all_svcs(u32 isNew3DS)
 {
    u32* thread_ACL = *(*(u32***)CURRENT_KTHREAD + 0x22) - 0x6;
    u32* process_ACL = *(u32**)CURRENT_KPROCESS + (isNew3DS ? 0x24 : 0x22);
@@ -60,19 +63,18 @@ static u32 k_read_kaddr(u32* kaddr)
 
 static u32 read_kaddr(u32 kaddr)
 {
-   return svc_7b(k_read_kaddr, (u32*)kaddr);
+   return svc_7b((backdoor_fn)k_read_kaddr, kaddr);
 }
 
-static u32 k_write_kaddr(u32* args)
+static u32 k_write_kaddr(u32* kaddr, u32 val)
 {
-   *(u32*)args[0] = args[1];
+   *kaddr = val;
    return 0;
 }
 
 static void write_kaddr(u32 kaddr, u32 val)
 {
-   u32 args[] = {kaddr, val};
-   svc_7b(k_write_kaddr, args);
+   svc_7b((backdoor_fn)k_write_kaddr, kaddr, val);
 }
 
 __attribute__((naked))
@@ -88,7 +90,6 @@ static u32 get_thread_page(void)
       "bx lr \n\t");
    return 0;
 }
-
 
 typedef struct
 {
@@ -486,7 +487,7 @@ Result svchax_init(bool patch_srv)
             do_memchunkhax1();
       }
 
-      svc_7b((backdoor_fn)k_enable_all_svcs, (u32*)(int)isNew3DS);
+      svc_7b((backdoor_fn)k_enable_all_svcs, isNew3DS);
 
       __ctr_svchax = 1;
    }
