@@ -28,22 +28,21 @@ __attribute((naked))
 static u32 svc_7b(backdoor_fn entry_fn, ...) // can pass up to two arguments to entry_fn(...)
 {
    __asm__ volatile(
-            "push {r0, r1, r2} \n\t"
-            "mov r3, sp \n\t"
-            "add r0, pc, #12 \n\t"
-            "svc 0x7B \n\t"
-            "add sp, sp, #8 \n\t"
-            "ldr r0, [sp], #4 \n\t"
-            "bx lr \n\t"
-            "cpsid aif \n\t"
-            "ldr r2, [r3], #4 \n\t"
-            "ldmfd r3!, {r0, r1} \n\t"
-            "push {r3, lr} \n\t"
-            "blx r2 \n\t"
-            "pop {r3, lr} \n\t"
-            "str r0, [r3, #-4]! \n\t"
-            "bx lr \n\t"
-            );
+      "push {r0, r1, r2} \n\t"
+      "mov r3, sp \n\t"
+      "add r0, pc, #12 \n\t"
+      "svc 0x7B \n\t"
+      "add sp, sp, #8 \n\t"
+      "ldr r0, [sp], #4 \n\t"
+      "bx lr \n\t"
+      "cpsid aif \n\t"
+      "ldr r2, [r3], #4 \n\t"
+      "ldmfd r3!, {r0, r1} \n\t"
+      "push {r3, lr} \n\t"
+      "blx r2 \n\t"
+      "pop {r3, lr} \n\t"
+      "str r0, [r3, #-4]! \n\t"
+      "bx lr \n\t");
    return 0;
 }
 
@@ -170,12 +169,13 @@ static u32 get_first_free_basemem_page(bool isNew3DS)
    memused_base = osGetMemRegionUsed(MEMREGION_BASE);
 
    svcGetSystemInfo(&v1, 2, 0);
-   memused_base_linear = 0x6C000 + v1 + (osGetKernelVersion() > SYSTEM_VERSION(2, 49, 0)? (isNew3DS ? 0x2000 : 0x1000) : 0x0);
+   memused_base_linear = 0x6C000 + v1 +
+                         (osGetKernelVersion() > SYSTEM_VERSION(2, 49, 0) ? (isNew3DS ? 0x2000 : 0x1000) : 0x0);
 
-   return (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0)? 0xE0000000 : 0xF0000000) // kernel FCRAM mapping
-         + (isNew3DS ? 0x10000000 : 0x08000000)  // FCRAM size
-         - (memused_base - memused_base_linear)  // memory usage for pages allocated without the MEMOP_LINEAR flag
-         - 0x1000;  // skip to the start addr of the next free page
+   return (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0) ? 0xE0000000 : 0xF0000000) // kernel FCRAM mapping
+          + (isNew3DS ? 0x10000000 : 0x08000000)  // FCRAM size
+          - (memused_base - memused_base_linear)  // memory usage for pages allocated without the MEMOP_LINEAR flag
+          - 0x1000;  // skip to the start addr of the next free page
 
 }
 
@@ -208,7 +208,7 @@ static void do_memchunkhax2(void)
 
    mch2.flush_buffer = flush_buffer;
    mch2.threads_limit = get_threads_limit();
-   mch2.kernel_fcram_mapping_offset = (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0))? 0xC0000000 : 0xD0000000;
+   mch2.kernel_fcram_mapping_offset = (osGetKernelVersion() > SYSTEM_VERSION(2, 40, 0)) ? 0xC0000000 : 0xD0000000;
 
    for (i = 0; i < MCH2_THREAD_COUNT_MAX; i++)
       mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + (i + 1) * (MCH2_THREAD_STACKS_SIZE / MCH2_THREAD_COUNT_MAX));
@@ -298,8 +298,8 @@ static void do_memchunkhax2(void)
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
 
-   svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2, mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top,
-                   0x3F, 1);
+   svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2,
+                   mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top, 0x3F, 1);
 
    while ((u32) svcArbitrateAddress(mch2.arbiter, mch2.alloc_address, ARBITRATION_WAIT_IF_LESS_THAN_TIMEOUT, 0,
                                     0) == 0xD9001814);
