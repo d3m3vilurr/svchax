@@ -251,14 +251,19 @@ static void create_dummy_threads(mch2_vars_t *mch2) {
 }
 
 static void create_target_thread(mch2_vars_t *mch2, mch2_thread_t *thread) {
-   thread->args.started_event = mch2->main_thread_lock;
+   Handle thread_lock;
+   svcCreateEvent(&thread_lock, 0);
+
+   thread->args.started_event = thread_lock;
    thread->args.lock = mch2->target_threads_lock;
    thread->args.target_kaddr = 0;
 
-   svcClearEvent(mch2->main_thread_lock);
+   svcClearEvent(thread_lock);
    svcCreateThread(&thread->handle, (ThreadFunc)target_thread_entry,
                    (u32)&thread->args, thread->stack_top, 0x18, 0);
-   svcWaitSynchronization(mch2->main_thread_lock, U64_MAX);
+   svcWaitSynchronization(thread_lock, U64_MAX);
+
+   svcCloseHandle(thread_lock);
 }
 
 static void close_not_keep_target_threads(mch2_vars_t *mch2) {
@@ -390,7 +395,7 @@ static void do_memchunkhax2(void)
    volatile u32* thread_ACL = &mapped_page[THREAD_PAGE_ACL_OFFSET >> 2];
 
    printf("main thread event start\n");
-   svcCreateEvent(&mch2.main_thread_lock, 0);
+   //svcCreateEvent(&mch2.main_thread_lock, 0);
    svcCreateEvent(&mch2.target_threads_lock, 1);
    svcClearEvent(mch2.target_threads_lock);
 
@@ -423,21 +428,26 @@ static void do_memchunkhax2(void)
 
    close_not_keep_target_threads(&mch2);
 
-   svcCloseHandle(mch2.main_thread_lock);
+   //svcCloseHandle(mch2.main_thread_lock);
    printf("main thread event done\n");
 
    svcControlMemory(&tmp, mch2.alloc_address, 0, mch2.alloc_size, MEMOP_FREE, MEMPERM_DONTCARE);
    write_kaddr(alloc_address_kaddr + linear_size - 0x3000 + 0x4, alloc_address_kaddr + linear_size - 0x1000);
    svcControlMemory(&tmp, (u32)fragmented_address, 0x0, fragmented_size, MEMOP_FREE, MEMPERM_DONTCARE);
 
+   printf("control 1\n");
    for (i = 1 + skip_pages; i < (linear_size >> 12) ; i += 2)
       svcControlMemory(&tmp, (u32)linear_address + (i << 12), 0x0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
+   printf("control 2\n");
    svcControlMemory(&tmp, linear_buffer, 0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
+   printf("control 3\n");
    aptOpenSession();
    APT_SetAppCpuTimeLimit(mch2.old_cpu_time_limit);
    aptCloseSession();
+   printf("control 4\n");
+
 }
 
 
