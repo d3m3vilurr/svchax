@@ -253,6 +253,7 @@ static void do_memchunkhax2(void)
    u32 fragmented_address = 0;
 
    mch2.arbiter = __sync_get_arbiter();
+   printf("- arbiter: 0x%lx\n", mch2.arbiter);
 
    u32 linear_buffer;
    svcControlMemory(&linear_buffer, 0, 0, 0x1000, MEMOP_ALLOC_LINEAR, MEMPERM_READ | MEMPERM_WRITE);
@@ -285,6 +286,8 @@ static void do_memchunkhax2(void)
    u32 alloc_address_kaddr = osConvertVirtToPhys((void*)linear_address) + mch2.kernel_fcram_mapping_offset;
 
    mch2.thread_page_kva = get_first_free_basemem_page(mch2.isNew3DS) - 0x10000; // skip down 16 pages
+   printf("- thread_page_kva: 0x%lx\n", mch2.thread_page_kva);
+
    ((u32*)linear_buffer)[0] = 1;
    ((u32*)linear_buffer)[1] = mch2.thread_page_kva;
    ((u32*)linear_buffer)[2] = alloc_address_kaddr + (((mch2.alloc_size >> 12) - 3) << 13) + (skip_pages << 12);
