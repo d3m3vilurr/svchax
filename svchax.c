@@ -218,9 +218,16 @@ static u8 do_memchunkhax2(void)
 
    aptOpenSession();
    APT_CheckNew3DS(&mch2.isNew3DS);
-   APT_GetAppCpuTimeLimit(&mch2.old_cpu_time_limit);
-   APT_SetAppCpuTimeLimit(5);
+   if (APT_GetAppCpuTimeLimit(&mch2.old_cpu_time_limit)) {
+      printf("[x] get cpu time limit fail\n");
+   }
+   printf("[x] old cpu limit: %d\n", mch2.old_cpu_time_limit);
+   u32 ret = APT_SetAppCpuTimeLimit(5);
    aptCloseSession();
+   if (ret) {
+      printf("[x] set cpu time limit fail: 0x%lx\n", ret);
+      return 1;
+   }
 
    printf("[x] create tls threads\n - ");
    for (i = 0; i < mch2.threads_limit; i++)
@@ -331,11 +338,17 @@ static u8 do_memchunkhax2(void)
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
 
-   printf("[x] create alloc thread\n");
-   if (svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry,
-                       (u32)&mch2,
-                       mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top,
-                       0x3F, 1)) return 1;
+   printf("[x] create alloc thread: ");
+   s32 retry = 100;
+   while (retry--) {
+      u32 alloc_thread_ret = svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry,
+                                             (u32)&mch2,
+                                             mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top,
+                                             0x3F, 1);
+      printf("0x%lx\n", alloc_thread_ret);
+      if (!alloc_thread_ret) break;
+   }
+   if (retry <= 0) return 1;
 
    i = 0;
    printf("[x] wait allocate");
